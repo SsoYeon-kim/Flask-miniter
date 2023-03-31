@@ -149,6 +149,11 @@ def create_app(test_config=None):
     database = create_engine(app.config['DB_URL'], encoding = 'utf-8', max_overflow = 0)
     app.database = database
 
+    # ping test
+    @app.route("/ping", methods=['GET'])
+    def ping():
+        return "pong"
+    
     # 회원가입 엔드포인트
     @app.route('/sign-up', methods=['POST'])
     def sign_up():
