@@ -1,6 +1,10 @@
-from flask import Flask, jsonify, request, current_app
+from flask import Flask, jsonify, request, current_app, Response, g
 from flask.json import JSONEncoder
 from sqlalchemy import create_engine, text
+import bcrypt
+import jwt
+from datetime   import datetime, timedelta
+from functools import wraps
 
 class CustomJSONEncoder(JSONEncoder):
     def default(self, obj):
@@ -91,6 +95,45 @@ def get_timeline(user_id):
         'tweet' : tweet['tweet']
     } for tweet in timeline]
 
+# 사용자 인증
+def get_user_id_and_password(email):
+    row = current_app.database.execute(text("""
+        SELECT
+            id,
+            hashed_password
+        FROM users
+        WHERE email = :email
+    """), {'email' : email}).fetchone()
+
+    return {
+        'id' : row['id'],
+        'hashed_password' : row['hashed_password']
+    } if row else None
+
+# ---------- Decorators ----------
+# 로그인 된 상태에만 실행 가능 (tweet, follow, unfollow)
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        access_token = request.headers.get('Authorization')
+        if access_token is not None:
+            try:
+                payload = jwt.decode(access_token, current_app.config['JWT_SECRET_KEY'], 'HS256')
+            except jwt.InvalidTokenError:
+                payload = None
+            
+            if payload is None: return Response(status=401)
+
+            user_id = payload['user_id']
+            g.user_id = user_id
+            g.user = get_user(user_id) if user_id else None
+        else:
+            return Response(status=401)
+    
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # API, DB 연결
 def create_app(test_config=None):
     app = Flask(__name__)
@@ -108,15 +151,43 @@ def create_app(test_config=None):
     @app.route('/sign-up', methods=['POST'])
     def sign_up():
         new_user = request.json
+        new_user['password'] = bcrypt.hashpw(
+            new_user['password'].encode('UTF-8'), bcrypt.gensalt()
+        )
         new_user_id = insert_user(new_user)
         new_user = get_user(new_user_id)
 
         return jsonify(new_user)
     
+    # 로그인 엔드포인트
+    @app.route('/login', methods=['POST'])
+    def login():
+        credential = request.json
+        email = credential['email']
+        password = credential['password']
+        user_credential = get_user_id_and_password(email)
+
+        if user_credential and bcrypt.checkpw(password.encode('UTF-8'), user_credential['hashed_password'].encode('UTF-8')):
+            user_id = user_credential['id']
+            payload = {
+                'user_id' : user_id,
+                'exp' : datetime.utcnow() + timedelta(seconds = 60 * 60 * 24)
+            }
+            # access token 생성 (jwt 버전에 따라 return type 다름)
+            token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], 'HS256') 
+
+            return jsonify({        
+                'access_token' : token
+            })
+        else:
+            return '', 401
+
     # tweet 엔드포인트
     @app.route('/tweet', methods=['POST'])
+    @login_required
     def tweet():
         user_tweet = request.json
+        user_tweet['id'] = g.user_id
         tweet = user_tweet['tweet']
 
         if len(tweet) > 300:
@@ -129,35 +200,27 @@ def create_app(test_config=None):
     # timeline 엔드포인트
     @app.route('/timeline/<int:user_id>', methods=['GET'])
     def timeline(user_id):
-        rows = app.database.execute(text("""
-                                            SELECT 
-                                                t.user_id,
-                                                t.tweet
-                                            FROM tweets t
-                                            LEFT JOIN users_follow_list ufl ON ufl.user_id = :user_id
-                                            WHERE t.user_id = :user_id
-                                            OR t.user_id = ufl.follow_user_id
-                                        """), {'user_id':user_id}).fetchall()
-        
-        timeline = [{'user_id' : row['user_id'], 'tweet' : row['tweet']} for row in rows]
-
         return jsonify({
             'user_id' : user_id,
-            'timeline' : timeline
+            'timeline' : get_timeline(user_id)
         })
     
     # follow 엔드포인트
     @app.route('/follow', methods=['POST'])
+    @login_required
     def follow():
         payload = request.json
+        payload['id'] = g.user_id
         insert_follow(payload)
         
         return '', 200
 
     # unfollow 엔드포인트
     @app.route('/unfollow', methods=['POST'])
+    @login_required
     def unfollow():
         payload = request.json
+        payload['id'] = g.user_id
         insert_unfollow(payload)
 
         return '', 200
