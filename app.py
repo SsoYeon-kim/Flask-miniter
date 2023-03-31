@@ -5,6 +5,7 @@ import bcrypt
 import jwt
 from datetime   import datetime, timedelta
 from functools import wraps
+from flask_cors import CORS
 
 class CustomJSONEncoder(JSONEncoder):
     def default(self, obj):
@@ -137,6 +138,7 @@ def login_required(f):
 # API, DB 연결
 def create_app(test_config=None):
     app = Flask(__name__)
+    CORS(app)
     app.json_encoder = CustomJSONEncoder
 
     if test_config is None:
@@ -176,7 +178,8 @@ def create_app(test_config=None):
             # access token 생성 (jwt 버전에 따라 return type 다름)
             token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], 'HS256') 
 
-            return jsonify({        
+            return jsonify({   
+                'user_id' : user_id,     
                 'access_token' : token
             })
         else:
@@ -196,14 +199,6 @@ def create_app(test_config=None):
         insert_tweet(user_tweet)
         
         return '', 200
-
-    # timeline 엔드포인트
-    @app.route('/timeline/<int:user_id>', methods=['GET'])
-    def timeline(user_id):
-        return jsonify({
-            'user_id' : user_id,
-            'timeline' : get_timeline(user_id)
-        })
     
     # follow 엔드포인트
     @app.route('/follow', methods=['POST'])
@@ -224,5 +219,24 @@ def create_app(test_config=None):
         insert_unfollow(payload)
 
         return '', 200
+
+    # timeline/user_id 엔드포인트
+    @app.route('/timeline/<int:user_id>', methods=['GET'])
+    def timeline(user_id):
+        return jsonify({
+            'user_id' : user_id,
+            'timeline' : get_timeline(user_id)
+        })
+        
+    # timeline 엔드포인트
+    @app.route('/timeline', methods=['GET'])
+    @login_required
+    def user_timeline():
+        user_id = g.user_id
+
+        return jsonify({
+            'user_id' : user_id,
+            'timeline' : get_timeline(user_id)
+        })
 
     return app
