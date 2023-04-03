@@ -1,0 +1,22 @@
+Metadata-Version: 1.1
+Name: Flask-Twisted
+Version: 0.1.2
+Summary: Simple integration of Flask and Twisted
+Home-page: http://github.com/cravler/flask-twisted/
+Author: Sergei Vizel
+Author-email: sergei.vizel@gmail.com
+License: MIT
+Description: 
+        Flask-Twisted
+        -------------
+        
+        Simple integration of Flask and Twisted
+        
+Platform: any
+Classifier: Environment :: Web Environment
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
