@@ -127,11 +127,12 @@ def test_tweet(api):
         content_type = 'application/json',
         headers      = {'Authorization' : access_token}
     )
+
     assert resp.status_code == 200
 
     # tweet 조회
     resp   = api.get(f'/timeline/1')
-    tweets = json.loads(resp.data.decode('utf-8'))
+    tweets = json.loads(resp.data)
 
     assert resp.status_code == 200
     assert tweets           == { 

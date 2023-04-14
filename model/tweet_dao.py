@@ -3,7 +3,7 @@ from sqlalchemy import text
 class TweetDao:
     def __init__(self, database):
         self.db = database
-        
+
     def insert_tweet(self, user_id, tweet):
         return self.db.execute(text("""
             INSERT INTO tweets (
@@ -12,10 +12,11 @@ class TweetDao:
             ) VALUES (
                 :id,
                 :tweet
-            )"""), {
-                'id' : user_id,
-                'tweet' : tweet
-            }).rowcount
+            )
+        """), {
+            'id'    : user_id,
+            'tweet' : tweet
+        }).rowcount
 
     def get_timeline(self, user_id):
         timeline = self.db.execute(text("""
