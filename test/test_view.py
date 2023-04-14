@@ -1,12 +1,14 @@
-import config
-from sqlalchemy import create_engine, text
-from app import create_app
 import pytest
-import json
 import bcrypt
+import json
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+import config
 
-database = create_engine(config.test_config['DB_URL'], encoding='utf-8', max_overflow=0)
+from app import create_app
+from sqlalchemy import create_engine, text
 
+database = create_engine(config.test_config['DB_URL'], encoding= 'utf-8', max_overflow = 0)
 
 @pytest.fixture
 def api():
@@ -16,7 +18,7 @@ def api():
 
     return api
 
-# test ½ÇÇà Àü 
+# test ì‹¤í–‰ ì „ 
 def setup_function():
     # create test user
     hashed_password = bcrypt.hashpw(
@@ -54,7 +56,7 @@ def setup_function():
         )
     """), new_users)
 
-    # user2¿¡ ´ëÇÑ tweet ¹Ì¸® »ı¼º
+    # user2ì— ëŒ€í•œ tweet ë¯¸ë¦¬ ìƒì„±
     database.execute(text("""
                         INSERT INTO tweets (
                             user_id,
@@ -65,7 +67,7 @@ def setup_function():
                         )"""
                     ))
 
-# test ½ÇÇà ÈÄ 
+# test ì‹¤í–‰ í›„ 
 def teardown_function():
     database.execute(text("SET FOREIGN_KEY_CHECKS=0"))
     database.execute(text("TRUNCATE users"))
@@ -77,7 +79,6 @@ def test_ping(api):
     resp = api.get('/ping')
     assert b'pong' in resp.data
 
-
 def test_login(api):
     resp = api.post(
         '/login',
@@ -86,8 +87,31 @@ def test_login(api):
     )
     assert b"access_token" in resp.data 
 
+def test_unauthorized(api):
+    # access token ì—†ì´ 401 ë¦¬í„´ í™•ì¸
+    resp = api.post(
+        '/tweet',
+        data = json.dumps({'tweet':'test tweet'}),
+        content_type = 'application/json'
+    )
+    assert resp.status_code == 401
+
+    resp = api.post(
+        '/follow',
+        data = json.dumps({'follow':2}),
+        content_type = 'application/json'
+    )
+    assert resp.status_code == 401
+
+    resp = api.post(
+        '/unfollow',
+        data = json.dumps({'unfollow':2}),
+        content_type = 'application/json'
+    )
+    assert resp.status_code == 401
+
 def test_tweet(api):
-    # ·Î±×ÀÎ
+    # ë¡œê·¸ì¸
     resp = api.post(
         '/login',
         data = json.dumps({'email' : 'test@test.com', 'password' : '1234'}),
@@ -103,11 +127,12 @@ def test_tweet(api):
         content_type = 'application/json',
         headers      = {'Authorization' : access_token}
     )
+
     assert resp.status_code == 200
 
-    # tweet Á¶È¸
+    # tweet ì¡°íšŒ
     resp   = api.get(f'/timeline/1')
-    tweets = json.loads(resp.data.decode('utf-8'))
+    tweets = json.loads(resp.data)
 
     assert resp.status_code == 200
     assert tweets           == { 
@@ -120,122 +145,99 @@ def test_tweet(api):
         ]
     }
 
-def test_unauthorized(api):
-    # access tokenÀÌ ¾øÀ¸¸é 401 ÀÀ´ä ¸®ÅÏ È®ÀÎ
-    resp = api.post(
-        '/tweet',
-        data = json.dumps({'tweet' : 'test tweet'}),
-        content_type = 'application/json'
-    )
-    assert resp.status_code == 401
-
-    resp = api.post(
-        '/follow',
-        data = json.dumps({'follow' : 2}),
-        content_type = 'application/json'
-    )
-    assert resp.status_code == 401
-
-    resp = api.post(
-        '/unfollow',
-        data = json.dumps({'unfollow' : 2}),
-        content_type = 'application/json'
-    )
-    assert resp.status_code == 401
-
 def test_follow(api):
-    # login
+    # ë¡œê·¸ì¸
     resp = api.post(
         '/login',
-        data = json.dumps({'email':'test@test.com', 'password':'1234'}),
+        data         = json.dumps({'email' : 'test@test.com', 'password' : '1234'}),
         content_type = 'application/json'
     )
-    resp_json = json.loads(resp.data.decode('utf-8'))
+    resp_json    = json.loads(resp.data.decode('utf-8'))
     access_token = resp_json['access_token']
 
-    # user1ÀÇ tweet¸®½ºÆ®°¡ ºñ¾îÀÖ´ÂÁö È®ÀÎ
-    resp = api.get(f'/timeline/1')
-    tweets = json.loads(resp.data.decode('utf-8'))
-
-    assert resp.status_code == 200
-    assert tweets == {
-        'user_id' : 1,
-        'timeline' : []
-    }
-
-    # user1(test)°¡ user2(user) follow
-    resp = api.post(
-        '/follow',
-        data = json.dumps({'id':1, 'follow':2}),
-        content_type = 'application/json',
-        headers = {'Authorization' : access_token}
-    )
-    assert resp.status_code == 200
-
-    # user1ÀÇ tweet¿¡ user2ÀÇ tweetÀÌ Á¶È¸µÇ´ÂÁö È®ÀÎ
-    resp = api.get(f'/timeline/1')
-    tweets = json.loads(resp.data.decode('utf-8'))
-
-    assert resp.status_code == 200
-    assert tweets == {
-        'user_id' : 1,
-        'timeline' : [
-            {
-                'user_id' : 2,
-                'tweet' : 'user2 test tweet'
-            }
-        ]
-    }
-
-def test_unfollow(api):
-    # login
-    resp = api.post(
-        '/login',
-        data = json.dumps({'email':'test@test.com', 'password':'1234'}),
-        content_type = 'application/json'
-    )
-    resp_json = json.loads(resp.data.decode('utf-8'))
-    access_token = resp_json['access_token']
-
-    # user1(test)°¡ user2(user) follow
-    resp = api.post(
-        '/follow',
-        data = json.dumps({'id':1, 'follow':2}),
-        content_type = 'application/json',
-        headers = {'Authorization' : access_token}
-    )
-    assert resp.status_code == 200
-
-    # user1ÀÇ tweet¿¡ user2ÀÇ tweetÀÌ Á¶È¸µÇ´ÂÁö È®ÀÎ
-    resp = api.get(f'/timeline/1')
-    tweets = json.loads(resp.data.decode('utf-8'))
-
-    assert resp.status_code == 200
-    assert tweets == {
-        'user_id' : 1,
-        'timeline' : [
-            {
-                'user_id' : 2,
-                'tweet' : 'user2 test tweet'
-            }
-        ]
-    }
-
-    # unfollow user2(user)
-    resp  = api.post(
-        '/unfollow',
-        data = json.dumps({'id': 1,'unfollow' : 2}),
-        content_type = 'application/json',
-        headers = {'Authorization' : access_token}
-    )
-    assert resp.status_code == 200
-
-    # user1(test) tweet¿¡ user2(user)ÀÇ tweetÀÌ Á¶È¸µÇÁö ¾ÊÀ½À» È®ÀÎ
-    resp = api.get(f'/timeline/1')
+    ## ë¨¼ì € ìœ ì € 1ì˜ tweet í™•ì¸ í•´ì„œ tweet ë¦¬ìŠ¤íŠ¸ê°€ ë¹„ì–´ ìˆëŠ”ê²ƒì„ í™•ì¸
+    resp   = api.get(f'/timeline/1')
     tweets = json.loads(resp.data.decode('utf-8'))
 
     assert resp.status_code == 200
     assert tweets           == {
         'user_id'  : 1,
         'timeline' : [ ]
+    }
+
+    # follow ìœ ì € ì•„ì´ë”” = 2
+    resp  = api.post(
+        '/follow',
+        data         = json.dumps({'follow' : 2}),
+        content_type = 'application/json',
+        headers      = {'Authorization' : access_token}
+    )
+    assert resp.status_code == 200
+
+    ## ì´ì œ ìœ ì € 1ì˜ tweet í™•ì¸ í•´ì„œ ìœ ì € 2ì˜ tweetì˜ ë¦¬í„´ ë˜ëŠ”ê²ƒì„ í™•ì¸
+    resp   = api.get(f'/timeline/1')
+    tweets = json.loads(resp.data.decode('utf-8'))
+
+    assert resp.status_code == 200
+    assert tweets           == {
+        'user_id' : 1,
+        'timeline' : [
+            {
+                'user_id' : 2,
+                'tweet'   : "test tweet"
+            }
+        ]
+    }
+
+def test_unfollow(api):
+    # ë¡œê·¸ì¸
+    resp = api.post(
+        '/login',
+        data         = json.dumps({"email" : "test@test.com", "password" : "1234"}),
+        content_type = 'application/json'
+    )
+    resp_json    = json.loads(resp.data.decode('utf-8'))
+    access_token = resp_json['access_token']
+
+    # follow ìœ ì € ì•„ì´ë”” = 2
+    resp  = api.post(
+        '/follow',
+        data         = json.dumps({'follow' : 2}),
+        content_type = 'application/json',
+        headers      = {'Authorization' : access_token}
+    )
+    assert resp.status_code == 200
+
+    ## ì´ì œ ìœ ì € 1ì˜ tweet í™•ì¸ í•´ì„œ ìœ ì € 2ì˜ tweetì˜ ë¦¬í„´ ë˜ëŠ”ê²ƒì„ í™•ì¸
+    resp   = api.get(f'/timeline/1')
+    tweets = json.loads(str(resp.data.decode('utf-8')))
+
+    assert resp.status_code == 200
+    assert tweets           == {
+        "user_id"  : 1,
+        "timeline" : [
+            {
+                "user_id" : 2,
+                "tweet"   : "test tweet"
+            }
+        ]
+    }
+
+    # unfollow ìœ ì € ì•„ì´ë”” = 2
+    resp  = api.post(
+        '/unfollow',
+        data         = json.dumps({'unfollow' : 2}),
+        content_type = 'application/json',
+        headers      = {'Authorization' : access_token}
+    )
+    assert resp.status_code == 200
+
+    ## ì´ì œ ìœ ì € 1ì˜ tweet í™•ì¸ í•´ì„œ ìœ ì € 2ì˜ tweetì´ ë” ì´ìƒ ë¦¬í„´ ë˜ì§€ ì•ŠëŠ” ê²ƒì„ í™•ì¸
+    resp   = api.get(f'/timeline/1')
+    tweets = json.loads(resp.data.decode('utf-8'))
+
+    assert resp.status_code == 200
+    assert tweets           == {
+        "user_id"  : 1,
+        "timeline" : [ ]
     }
