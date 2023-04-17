@@ -7,12 +7,14 @@ import config
 from model import UserDao, TweetDao
 from service import UserService, TweetService
 from sqlalchemy import create_engine, text
+from unittest import mock
 
 database = create_engine(config.test_config['DB_URL'], encoding='utf-8', max_overflow=0)
 
 @pytest.fixture
 def user_service():
-    return UserService(UserDao(database), config)
+    mock_s3_client = mock.Mock()
+    return UserService(UserDao(database), config.test_config, mock_s3_client)
 
 @pytest.fixture
 def tweet_service():

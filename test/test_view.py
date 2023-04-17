@@ -1,14 +1,26 @@
 import pytest
 import bcrypt
-import json
-import sys, os
+import sys, os, io, json
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 import config
 
 from app import create_app
 from sqlalchemy import create_engine, text
+from unittest import mock
 
 database = create_engine(config.test_config['DB_URL'], encoding= 'utf-8', max_overflow = 0)
+
+# 런타임에 boto3.client 객체를 mock객체로 치환
+# app.py에서 import한 boto3모듈을 import (app.boto3)
+@pytest.fixture
+@mock.patch('app.boto3')
+def api(mock_boto3):
+    mock_boto3.client.return_value = mock.Mock()
+    app = create_app(config.test_config)
+    app.config['TEST'] = True
+    api = app.test_client()
+
+    return api
 
 @pytest.fixture
 def api():
@@ -241,3 +253,29 @@ def test_unfollow(api):
         "user_id"  : 1,
         "timeline" : [ ]
     }
+
+def test_save_and_get_profile_picture(api):
+    # 로그인
+    resp = api.post(
+        '/login',
+        data         = json.dumps({"email" : "test@test.com", "password" : "1234"}),
+        content_type = 'application/json'
+    )
+    resp_json    = json.loads(resp.data.decode('utf-8'))
+    access_token = resp_json['access_token']
+
+    # 이미지 파일 업로드
+    resp = api.post(
+        '/profile-picture',
+        content_type = 'multipart/form-data',
+        headers = {'Authorization' : access_token},
+        data = {'profile_pic' : (io.BytesIO(b'some image here'), 'profile.png')}
+    )
+
+    assert resp.status_code == 200
+
+    # get image url
+    resp = api.get('/profile-picture/1')
+    data = json.loads(resp.data.decode('utf-8'))
+
+    assert data['img_url'] == f"{config.test_config['S3_BUCKET_URL']}profile.png"

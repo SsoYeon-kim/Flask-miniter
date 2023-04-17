@@ -6,6 +6,7 @@ import config
 
 from model import UserDao, TweetDao
 from sqlalchemy import create_engine, text
+from unittest import mock
 
 database = create_engine(config.test_config['DB_URL'], encoding='utf-8', max_overflow=0)
 
@@ -17,7 +18,7 @@ def user_dao():
 def tweet_dao():
     return TweetDao(database)
 
-# test ½ÇÇà Àü 
+# test ì‹¤í–‰ ì „ 
 def setup_function():
     # create test user
     hashed_password = bcrypt.hashpw(
@@ -55,7 +56,7 @@ def setup_function():
         )
     """), new_users)
 
-    # user2¿¡ ´ëÇÑ tweet ¹Ì¸® »ı¼º
+    # user2ì— ëŒ€í•œ tweet ë¯¸ë¦¬ ìƒì„±
     database.execute(text("""
                         INSERT INTO tweets (
                             user_id,
@@ -66,7 +67,7 @@ def setup_function():
                         )"""
                     ))
 
-# test ½ÇÇà ÈÄ 
+# test ì‹¤í–‰ í›„ 
 def teardown_function():
     database.execute(text("SET FOREIGN_KEY_CHECKS=0"))
     database.execute(text("TRUNCATE users"))
@@ -74,7 +75,7 @@ def teardown_function():
     database.execute(text("TRUNCATE users_follow_list"))
     database.execute(text("SET FOREIGN_KEY_CHECKS=1"))
 
-# »ç¿ëÀÚ »ı¼º È®ÀÎ
+# ì‚¬ìš©ì ìƒì„± í™•ì¸
 def get_user(user_id):
     row = database.execute(text("""
         SELECT 
@@ -95,7 +96,7 @@ def get_user(user_id):
         'profile' : row['profile']
     } if row else None
 
-# ÆÈ·Î¿ì ¸®½ºÆ® È®ÀÎ
+# íŒ”ë¡œìš° ë¦¬ìŠ¤íŠ¸ í™•ì¸
 def get_follow_list(user_id):
     rows = database.execute(text("""
         SELECT follow_user_id as id
@@ -126,13 +127,13 @@ def test_insert_user(user_dao):
     }
 
 def test_get_user_id_and_password(user_dao):
-    # get_user_id_and_password ¸Ş¼Òµå¸¦ È£ÃâÇØ À¯ÀúÀÇ ¾ÆÀÌµğ¿Í ºñ¹Ğ¹øÈ£ ÇØ½Ã °ªÀ» ÀĞ¾î¿È
-    # À¯Àú´Â ÀÌ¹Ì setup_function¿¡¼­ »ı¼ºµÈ À¯Àú¸¦ »ç¿ë
+    # get_user_id_and_password ë©”ì†Œë“œë¥¼ í˜¸ì¶œí•´ ìœ ì €ì˜ ì•„ì´ë””ì™€ ë¹„ë°€ë²ˆí˜¸ í•´ì‹œ ê°’ì„ ì½ì–´ì˜´
+    # ìœ ì €ëŠ” ì´ë¯¸ setup_functionì—ì„œ ìƒì„±ëœ ìœ ì €ë¥¼ ì‚¬ìš©
     user_credential = user_dao.get_user_id_and_password(email = 'test@test.com')
 
-    # À¯Àú ¾ÆÀÌµğ È®ÀÎ
+    # ìœ ì € ì•„ì´ë”” í™•ì¸
     assert user_credential['id'] == 1
-    # À¯Àú ºñ¹Ğ¹øÈ£ È®ÀÎ
+    # ìœ ì € ë¹„ë°€ë²ˆí˜¸ í™•ì¸
     assert bcrypt.checkpw('1234'.encode('UTF-8'), user_credential['hashed_password'].encode('UTF-8'))
 
 def test_insert_follow(user_dao):
@@ -181,3 +182,16 @@ def test_timeline(user_dao, tweet_dao):
             'tweet': 'second tweet test'
         }
     ]
+
+def test_save_and_get_profile_picture(user_dao):
+    user_id = 1
+    user_profile_picture = user_dao.get_profile_picture(user_id)
+    assert user_profile_picture is None
+
+    # ì €ì¥
+    expected_profile_picture = "https://s3.test.amazonaws.com/test/profile.png"
+    user_dao.save_profile_picture(expected_profile_picture, user_id)
+
+    # ì¡°íšŒ
+    actual_profile_picture = user_dao.get_profile_picture(user_id)
+    assert expected_profile_picture == actual_profile_picture
